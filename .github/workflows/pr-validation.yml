@@ -8,7 +8,8 @@ on:
 permissions:
   contents: read
   pull-requests: write
- 
+
+
 jobs:
   validate:
     runs-on: [self-hosted, musa-gpu]
