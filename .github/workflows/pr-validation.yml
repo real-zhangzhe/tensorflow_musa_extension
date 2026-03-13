@@ -30,13 +30,13 @@ jobs:
       - name: Verify MUSA device availability
         run: |
           docker exec -i Runner bash <<'EOF'
-          # 激活 Miniconda（假设安装在 ~/miniconda）
-          source ~/miniconda/bin/activate
+          # 激活你想要的环境，比如 runner
+          source ~/miniconda/bin/activate runner
 
-          # 可选：打印当前 conda 环境
+          # 打印当前环境
           echo "🌟 Current conda environment: $(conda info --envs | grep '*' | awk '{print $1}')"
 
-          # Python 脚本检测 TensorFlow 与 MUSA 设备
+          # Python 多行检查
           python3 <<PYEOF
           import sys
           try:
@@ -50,7 +50,6 @@ jobs:
           devices = tf.config.list_physical_devices()
           print("Available devices:", devices)
 
-          # 检查 MUSA 设备或 GPU
           musa_devices = [d for d in devices if 'MUSA' in d.name or 'GPU' in d.name]
           if len(musa_devices) == 0:
               print("❌ No MUSA device found!")
@@ -58,8 +57,8 @@ jobs:
 
           print("✅ MUSA device detected:", musa_devices[0])
           PYEOF
-          EOF 
-          
+          EOF
+
       # 5. 进入容器跑单元测试（已修复原脚本中状态输出覆盖的隐藏 Bug）
       - name: Run unit tests
         id: run-tests
