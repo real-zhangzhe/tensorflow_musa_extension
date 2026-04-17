@@ -24,40 +24,40 @@ from musa_test_utils import MUSATestCase
 class GatherOpTest(MUSATestCase):
   """Tests for MUSA Gather operator."""
 
-  def _test_gather(self, params_shape, indices_data, axis=0, 
+  def _test_gather(self, params_shape, indices_data, axis=0,
                    dtype=tf.float32, indices_dtype=tf.int32, rtol=1e-5, atol=1e-8):
     """Test gather operation with given parameters."""
     if dtype == tf.bfloat16:
       params_np = np.random.uniform(-1, 1, size=params_shape).astype(np.float32)
     else:
       params_np = np.random.uniform(-1, 1, size=params_shape).astype(dtype.as_numpy_dtype)
-    
+
     indices_np = np.array(indices_data, dtype=indices_dtype.as_numpy_dtype)
-    
+
     params = tf.constant(params_np, dtype=dtype)
     indices = tf.constant(indices_np, dtype=indices_dtype)
     axis_tensor = tf.constant(axis, dtype=tf.int32)
-    
+
     # Test on CPU
     with tf.device('/CPU:0'):
       cpu_result = tf.gather(params, indices, axis=axis)
-    
+
     # Test on MUSA
     with tf.device('/device:MUSA:0'):
       musa_result = tf.gather(params, indices, axis=axis)
-    
+
     # Compare results
     if dtype in [tf.float16, tf.bfloat16]:
       cpu_result_f32 = tf.cast(cpu_result, tf.float32)
       musa_result_f32 = tf.cast(musa_result, tf.float32)
-      self.assertAllClose(cpu_result_f32.numpy(), 
+      self.assertAllClose(cpu_result_f32.numpy(),
                          musa_result_f32.numpy(),
-                         rtol=rtol, 
+                         rtol=rtol,
                          atol=atol)
     else:
-      self.assertAllClose(cpu_result.numpy(), 
+      self.assertAllClose(cpu_result.numpy(),
                          musa_result.numpy(),
-                         rtol=rtol, 
+                         rtol=rtol,
                          atol=atol)
 
   def testGather1D(self):
@@ -76,7 +76,7 @@ class GatherOpTest(MUSATestCase):
       atol = 1e-2 if dtype in [tf.float16, tf.bfloat16] else 1e-8
       for indices_dtype in [tf.int32, tf.int64]:
         with self.subTest(dtype=dtype, indices_dtype=indices_dtype):
-          self._test_gather([3, 4], indices_data, axis=0, dtype=dtype, 
+          self._test_gather([3, 4], indices_data, axis=0, dtype=dtype,
                            indices_dtype=indices_dtype, rtol=rtol, atol=atol)
 
   def testGather2DAxis1(self):
@@ -87,7 +87,7 @@ class GatherOpTest(MUSATestCase):
       atol = 1e-2 if dtype in [tf.float16, tf.bfloat16] else 1e-8
       for indices_dtype in [tf.int32, tf.int64]:
         with self.subTest(dtype=dtype, indices_dtype=indices_dtype):
-          self._test_gather([3, 4], indices_data, axis=1, dtype=dtype, 
+          self._test_gather([3, 4], indices_data, axis=1, dtype=dtype,
                            indices_dtype=indices_dtype, rtol=rtol, atol=atol)
 
   def testGather3D(self):
@@ -96,8 +96,46 @@ class GatherOpTest(MUSATestCase):
     for dtype in [tf.float32]:
       for indices_dtype in [tf.int32, tf.int64]:
         with self.subTest(dtype=dtype, indices_dtype=indices_dtype):
-          self._test_gather([2, 3, 4], indices_data, axis=0, dtype=dtype, 
+          self._test_gather([2, 3, 4], indices_data, axis=0, dtype=dtype,
                            indices_dtype=indices_dtype)
+
+  def testGather3DNonZeroAxis(self):
+    """3D tensor gather along non-zero axis.
+
+    Reproducer for the gather bug fixed in PR #166: the previous muDNN-based
+    GatherV2 implementation produced an incorrect output shape when
+    ``axis > 0`` because it computed the leading output dimensions from
+    ``batch_dims`` instead of ``axis``. For ``params`` of shape [2, 3, 6] and
+    ``axis=2``, the expected output shape is [2, 3, len(indices)], but the
+    buggy kernel produced [len(indices)] (or mismatched values), causing this
+    test's value comparison against the CPU reference to fail.
+    """
+    for params_shape, axis, indices_data in [
+        ([2, 4, 5], 1, [0, 2]),
+        ([2, 3, 6], 2, [1, 3]),
+    ]:
+      for indices_dtype in [tf.int32, tf.int64]:
+        with self.subTest(params_shape=params_shape, axis=axis,
+                          indices_dtype=indices_dtype):
+          self._test_gather(params_shape, indices_data, axis=axis,
+                           dtype=tf.float32, indices_dtype=indices_dtype)
+
+  def testGather3DMultiDimIndices(self):
+    """3D tensor gather with multi-dimensional (2D) indices.
+
+    Reproducer for the gather bug fixed in PR #166: the previous muDNN-based
+    implementation mishandled the indices-shape portion of the output when
+    ``indices`` had rank > 1. For ``params`` of shape [4, 3, 5] and
+    ``indices`` of shape [2, 2], the expected output shape is [2, 2, 3, 5]
+    (``indices.shape + params.shape[1:]``); the buggy kernel produced a
+    different shape or incorrect values.
+    """
+    params_shape = [4, 3, 5]
+    indices_data = [[0, 1], [2, 0]]  # 2D indices
+    for indices_dtype in [tf.int32, tf.int64]:
+      with self.subTest(indices_dtype=indices_dtype):
+        self._test_gather(params_shape, indices_data, axis=0,
+                         dtype=tf.float32, indices_dtype=indices_dtype)
 
   def testGatherDifferentIndicesDtypes(self):
     """Test gather with different indices data types."""
@@ -105,11 +143,11 @@ class GatherOpTest(MUSATestCase):
     indices_data = [1, 3]
     dtypes = [tf.float32, tf.int32]
     indices_dtypes = [tf.int32, tf.int64]
-    
+
     for dtype in dtypes:
       for indices_dtype in indices_dtypes:
         with self.subTest(dtype=dtype, indices_dtype=indices_dtype):
-          self._test_gather(params_shape, indices_data, dtype=dtype, 
+          self._test_gather(params_shape, indices_data, dtype=dtype,
                            indices_dtype=indices_dtype)
 
   def testGatherOutOfBounds(self):
@@ -120,7 +158,7 @@ class GatherOpTest(MUSATestCase):
         params = tf.constant([[1.0, 2.0], [3.0, 4.0]], dtype=tf.float32)
         indices = tf.constant([2], dtype=tf.int32)  # Out of bounds for axis 0
         tf.gather(params, indices, axis=0)
-    
+
     # Note: MUSA implementation uses GPU-side clamping for out-of-bounds indices
     # instead of raising an error. This is a design choice for performance.
     # The out-of-bounds index is clamped to the valid range [0, limit-1].
@@ -141,10 +179,10 @@ class GatherOpTest(MUSATestCase):
       result_shape = [0, 4]  # Empty first dimension
       params = tf.constant(np.random.uniform(-1, 1, size=params_shape), dtype=dtype)
       indices = tf.constant(indices_data, dtype=tf.int32)
-      
+
       with tf.device('/device:MUSA:0'):
         result = tf.gather(params, indices, axis=0)
-      
+
       self.assertAllEqual(result.shape, result_shape)
 
 
