@@ -4,3 +4,16 @@ build
 .vscode/**
 # crash dumps
 core.*
+
+# Secrets / credentials (do not commit)
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+*.secret
+credentials.json
+service-account*.json

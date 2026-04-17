@@ -5,7 +5,9 @@ repos:
       # Essential security and quality checks
       - id: check-merge-conflict     # Check for merge conflict markers
       - id: detect-private-key       # Detects private keys
-      
+      - id: check-added-large-files  # Prevents accidental commit of large binary blobs
+        args: [--maxkb=10240]
+
       # Basic code formatting (essential for consistency)
       - id: end-of-file-fixer        # Makes sure files end in a newline and only a newline
       - id: trailing-whitespace      # Trims trailing whitespace
@@ -13,6 +15,18 @@ repos:
       # Line endings - allow both CRLF and LF to be friendly to Windows contributors
       - id: mixed-line-ending        # Ensures consistent line endings
         args: [--fix=no]             # Don't auto-fix, let Git handle it
+
+  # Broader secret scanning (API keys, tokens, AWS creds, high-entropy strings, etc.)
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: |
+          (?x)^(
+            .*\.pb|
+            test/.*\.pb
+          )$
 
   - repo: https://github.com/jorisroovers/gitlint
     rev: v0.19.1
