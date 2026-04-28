@@ -30,9 +30,11 @@ class MusaCastOp : public MusaOpKernel {
       return;
     }
 
-    // Early exit for empty tensors - still need to allocate output with correct shape
+    // Early exit for empty tensors - must allocate output with DstT dtype,
+    // NOT return inp directly (inp has SrcT dtype, output must have DstT dtype)
     if (inp.NumElements() == 0) {
-      ctx->set_output(0, inp);
+      Tensor* output = nullptr;
+      OP_REQUIRES_OK(ctx, ctx->allocate_output(0, inp.shape(), &output));
       return;
     }
 
