@@ -167,6 +167,8 @@ class MusaFusedBatchNormGradOp : public MusaOpKernel {
     auto stream = device->GetStream();
     handle.SetAllowTF32(false);
 
+    musaMemsetAsync(const_cast<char*>(dx->tensor_data().data()), 0,
+                    dx->TotalBytes(), stream);
     musaMemsetAsync(d_scale->flat<float>().data(), 0,
                     d_scale->NumElements() * sizeof(float), stream);
     musaMemsetAsync(d_offset->flat<float>().data(), 0,
