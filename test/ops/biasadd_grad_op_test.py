@@ -85,5 +85,48 @@ class BiasAddGradOpTest(MUSATestCase):
       )
 
 
+  def testBiasAddGradEmptyInput(self):
+    """Test BiasAddGrad when the spatial/batch dimensions are empty (size 0).
+
+    This is the regression test for the bug where BiasAddGrad returned garbage
+    values instead of zeros when the input tensor has 0 elements.
+
+    Real-world trigger: In OneTrans MixedFFN, when the sequence has been fully
+    compressed to NS-tokens (s=0), the "shared" branch produces an empty tensor
+    of shape (B, 0, dim). The BiasAddGrad of W1S/W2S Dense layers then receives
+    an out_backprop with 0 elements, and the bias gradient must be all-zeros.
+    """
+    for dtype in [tf.float32, tf.float16, tf.bfloat16]:
+      np_dtype = np.float32 if dtype == tf.bfloat16 else dtype.as_numpy_dtype
+
+      # Shape (batch=4096, seq=0, features=512): mimics block_2 ffn W1S case
+      for empty_shape in [(4096, 0, 512), (4096, 0, 128), (0, 16)]:
+        grad_np = np.zeros(empty_shape, dtype=np_dtype)
+        grad = tf.constant(grad_np, dtype=dtype)
+
+        def op_wrapper(input_grad):
+          return tf.raw_ops.BiasAddGrad(
+              out_backprop=input_grad,
+              data_format='NHWC'
+          )
+
+        # CPU result must be all-zeros; MUSA result must match CPU exactly.
+        cpu_result = op_wrapper(tf.cast(grad, dtype))
+        with tf.device('/device:MUSA:0'):
+          musa_result = op_wrapper(tf.cast(grad, dtype))
+
+        expected_zeros = np.zeros(cpu_result.shape, dtype=np.float32)
+        self.assertAllClose(
+            tf.cast(cpu_result, tf.float32).numpy(),
+            expected_zeros,
+            rtol=0, atol=0,
+        )
+        self.assertAllClose(
+            tf.cast(musa_result, tf.float32).numpy(),
+            expected_zeros,
+            rtol=0, atol=0,
+        )
+
+
 if __name__ == "__main__":
   tf.test.main()
