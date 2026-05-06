@@ -475,7 +475,11 @@ jobs:
             BASELINE_PARENT=$(dirname "$BASELINE_WORKSPACE")
             mkdir -p "$BASELINE_PARENT"
             if [[ ! -d "$BASELINE_WORKSPACE/.git" ]]; then
-              git clone "$BASELINE_REPO_URL" "$BASELINE_WORKSPACE" || git clone "$FALLBACK_REPO_URL" "$BASELINE_WORKSPACE"
+              git clone "$BASELINE_REPO_URL" "$BASELINE_WORKSPACE" || {
+                echo "Official repo clone failed, using mirror..."
+                rm -rf "$BASELINE_WORKSPACE"
+                git clone "$FALLBACK_REPO_URL" "$BASELINE_WORKSPACE"
+              }
             fi
             cd "$BASELINE_WORKSPACE"
             if git remote get-url upstream >/dev/null 2>&1; then
